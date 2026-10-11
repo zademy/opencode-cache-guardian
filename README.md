@@ -111,6 +111,31 @@ plugin la ve. `costUsd=0` es un cero real (plan gratuito) y se informa como `0`,
 `primary` y `title` aparecen como valores separados de `requestKind`: los hooks se registran
 y se etiquetan por separado, y `title` no se dispara en doble junto a `context`.
 
+## Indicador en el terminal (plugin TUI)
+
+El directorio `tui/` es un segundo plugin, `cache-guardian.status`, que muestra en el pie
+de la sesion el acumulado de tokens leidos del cache: `cg cache read 24.4M`. Se actualiza
+en vivo con cada `session.usage.updated`. Sin datos, no muestra nada (no imprime un cero
+que confunda).
+
+Instalacion (el TUI solo descubre plugins que son DIRECTORIOS):
+
+```bash
+ln -s "$(pwd)/tui" ~/.config/opencode/plugins/cache-guardian-status
+```
+
+Y reinicia OpenCode. El pie aparece al abrir una sesion.
+
+Limitaciones, dichas sin adornos:
+
+- El host solo resuelve a su propia copia `effect` y `@opencode/plugin`. Importar
+  `@opentui/solid` desde un plugin de terceros choca con la copia interna del host
+  (registro duplicado de `OPENTUI_FORCE_UNICODE`), asi que el indicador renderiza
+  cadenas planas, sin color ni layout propio. En cuanto el host provea `@opentui` a
+  los plugins, se puede subir el pulido.
+- El proceso servidor tambien recorre ese directorio; el plugin se desactiva solo si
+  no encuentra `ctx.ui` (alli no hace nada, por diseño).
+
 ## Configuracion
 
 Ver [examples/opencode.jsonc](examples/opencode.jsonc). Todos los valores tienen un defecto

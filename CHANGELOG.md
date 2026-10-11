@@ -3,6 +3,26 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Versionado segun [SemVer](https://semver.org/lang/es/).
 
+## [0.2.0] - 2026-10-11
+
+### Anadido
+
+- **Plugin TUI companero** `cache-guardian.status` (`tui/`): indicador en el pie de la
+  sesion con el acumulado de tokens leidos del cache (`cg cache read 24.4M`), en vivo
+  desde `session.usage.updated`. Instalable por symlink del directorio; el TUI no
+  descubre ficheros sueltos. Sin datos no muestra nada, no un cero.
+- Guarda de carga en el proceso servidor: recorre el mismo directorio pero no tiene
+  `ctx.ui`, asi que el plugin se vuelve no-op alla.
+
+### Limitacion descubierta y documentada
+
+- El host resuelve a su copia solo `effect` y `@opencode/plugin` (verificado en
+  `packages/plugin/src/runtime-modules.ts`: `runtimePackages = ["effect",
+  "@opencode/plugin"]`). Importar `@opentui/solid` desde un plugin de terceros
+  instala una segunda instancia de `@opentui/core` y rompe con "OPENTUI_FORCE_UNICODE
+  is already registered with different configuration". El indicador renderiza cadenas
+  planas — los hijos de texto en TSX son cadenas, el renderer ya las pinta — y queda a
+  la espera de que el host provea `@opentui`.
 ## [0.1.2] - 2026-10-11
 
 Semantica de los contadores del proveedor verificada contra el fuente de OpenCode V2
