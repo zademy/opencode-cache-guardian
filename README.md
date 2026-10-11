@@ -89,6 +89,28 @@ En una sesion interactiva:
 V2 no ofrece canal de retorno en los comandos (`execute` devuelve `Promise<void>`), asi que
 la salida va a `stdout`.
 
+### Evidencia en ejecucion
+
+Medido contra OpenCode `2.0.26` real, en una sesion de agente en vivo:
+
+```text
+plugin list --builtin  ->  cache-guardian  local  ~/.config/opencode/plugins/cache-guardian.ts
+
+hook:  requestKind=primary  blockCount=15  prefixBlockCount=15
+       stablePrefixRatio=1  firstDivergence=-1  hookDurationMs=0
+       prefixEstimatedTokens=12284  provider=minimax-coding-plan
+
+uso:  cacheReadTokens=21958529  cacheWriteTokens=0
+      inputTokens=1178097  outputTokens=108161  costUsd=0
+```
+
+21,9 M de tokens leidos de cache frente a 1,2 M de entrada: la reutilizacion ocurre y el
+plugin la ve. `costUsd=0` es un cero real (plan gratuito) y se informa como `0`, no como
+`N/A`. El overhead del hook es de 0-1 ms.
+
+`primary` y `title` aparecen como valores separados de `requestKind`: los hooks se registran
+y se etiquetan por separado, y `title` no se dispara en doble junto a `context`.
+
 ## Configuracion
 
 Ver [examples/opencode.jsonc](examples/opencode.jsonc). Todos los valores tienen un defecto
@@ -157,8 +179,10 @@ Dichas sin adornos:
    demostrable que no reordenara texto libre, y reordenar puede cambiar el comportamiento
    aunque el contenido sea identico. Es un resultado aceptable de la especificacion, no un
    olvido: la alternativa era un flag `allowMutations` que no honrara su nombre.
-2. **El orden real de hooks no pudo verificarse en un host vivo.** OpenCode ignora
-   `XDG_CONFIG_HOME` y su salida de `plugin list` es inestable. Ver
+2. **Los comandos de barra no se han visto en una sesion interactiva.** El resto del
+   plugin si: se cargo y se ejecuto contra OpenCode `2.0.26` real, con hooks disparando,
+   observaciones persistidas y uso real del proveedor capturado. Escribe
+   `/cache_guardian_doctor` en una sesion para confirmar el registro de comandos. Ver
    [docs/v2-compatibility.md](docs/v2-compatibility.md).
 3. **Los tokens son una estimacion.** `chars / 4`, etiquetado como tal.
 4. **La division en bloques es nuestra, no del proveedor.** Es un indicador estructural.

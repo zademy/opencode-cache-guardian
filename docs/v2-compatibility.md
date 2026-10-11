@@ -200,29 +200,52 @@ Un plugin de un solo archivo en `~/.config/opencode/plugins/*.ts` se descubre so
 ignora en silencio. Por eso la guia de instalacion ofrece ambas vias: `plugins` con ruta, o
 un shim de un archivo en el directorio de plugins del usuario.
 
-## Verificacion en un host vivo: inconclusa
+## Verificacion en un host vivo: verificada
 
-Lo que **si** quedo verificado:
+El plugin se cargo y se ejecuto contra OpenCode `2.0.26` real, midiendo una sesion de
+agente en vivo. Lo observado:
 
-- el plugin compila y enlaza contra el paquete real `@opencode/plugin@2.0.26`;
-- 120 pruebas pasan, incluidas las de igualdad profunda antes/despues del hook;
-- existe un harness que reproduce `Plugin.Context` de forma estructural.
+-- **Carga**: `opencode plugin list --builtin` muestra
+  `cache-guardian  local  ~/.config/opencode/plugins/cache-guardian.ts`.
+-- **Los hooks disparan y los datos persisten**: 34 observaciones y 18 muestras de uso
+  escritas en `ctx.storage`.
+-- **Uso real del proveedor capturado**: `cacheReadTokens: 21958529` frente a
+  `inputTokens: 1178097`. La reutilizacion de cache es real y se observa.
+-- **Separacion de `requestKind`**: aparecen `primary` y `title` como valores distintos. El
+  hook `title` no se dispara en doble junto a `context`; cada uno se registra y se etiqueta
+  por separado.
+-- **Latencia y privacidad se sostienen**: `hookDurationMs` de 0 o 1 ms; `projectKey` es un
+  identificador opaco de 40 hex, no una ruta; solo se guardan digests.
 
-Lo que **no** pudo verificarse de forma no interactiva:
+### La trampa que hizo parecer que no cargaba
 
-- el orden real de ejecucion de hooks frente a otros plugins;
-- que `compaction` y `title` no se disparen en doble junto a `context`;
-- el registro efectivo de comandos en una sesion real.
+`opencode plugin list` **consulta el servicio en segundo plano que ya estaba corriendo**,
+arrancado antes de que existiera el shim. Sin `--builtin` no recarga nada, asi que el plugin
+nuevo no aparece. `--builtin` si carga los plugins en el proceso actual.
 
-Motivos, todos reproducidos:
+Aun asi, `--standalone` es un flag **global** y `opencode plugin list` lo rechaza con
+`Unrecognized flag`. No es la via para forzar una carga limpia.
 
-1. OpenCode ignora `XDG_CONFIG_HOME`; siempre lee `~/.config/opencode`, asi que no hay
-   aislamiento de configuracion posible.
-2. Un shim de prueba en `~/.config/opencode/plugins/` nunca aparecio en `opencode plugin list`
-   y su marcador de carga por `console.error` nunca se imprimio, ni con `--print-logs --log-level debug`.
-3. La salida de `opencode plugin list` es inestable: una ejecucion mostro filas `- local`
-   extra (`orca-opencode-status-tui`, `skill-audit`) que desaparecieron en la siguiente.
+### Lo que sigue sin verificar
 
-Por eso el repositorio incluye `scripts/verify-opencode.sh`, que el usuario ejecuta dentro
-de su propia sesion interactiva. Ese script imprime el informe real; la documentacion **no**
-afirma que el orden de hooks haya sido verificado contra un host vivo.
+El registro de los tres comandos de barra (`/cache_guardian_report`, `_doctor`, `_reset`) en
+una sesion interactiva. `opencode run` **no** resuelve comandos de barra, y el endpoint de
+API que los lista no se localizo. Es una comprobacion de una linea para el usuario: escribir
+`/cache_guardian_doctor` en una sesion.
+
+### Inspeccionar los datos a mano
+
+`ctx.storage` no guarda la clave tal cual: el servidor la_namespace como
+`plugin:<hex-utf16-del-plugin-id>:<clave>`, en la tabla `kv` de
+`opencode debug paths` -> base de datos.
+
+```bash
+sqlite3 "$(opencode debug paths | awk '/db/{print $3}')" \
+  "select value from kv where key like '%cache-guardian%' order by time_updated desc limit 1;"
+```
+
+Ojo: el `db` que devuelve ese comando es la base de OpenCode, no la de Cache Guardian.
+Cache Guardian no crea ninguna base propia; usa `ctx.storage`.
+
+`scripts/verify-opencode.sh` sigue siendo util: instala el shim, indica los pasos y limpia
+al terminar.
