@@ -53,7 +53,7 @@ export function parseUsageEvent(
   now: number,
 ): ProviderUsageSample | undefined {
   const envelope = record(event)
-  if (!envelope || envelope.type !== "session.usage.updated") return undefined
+  if (envelope?.type !== "session.usage.updated") return undefined
 
   const data = record(envelope.data)
   if (!data) return undefined
