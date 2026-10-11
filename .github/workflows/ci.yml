@@ -2,12 +2,12 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
 
 jobs:
   test:
-    name: ${{ matrix.os }}
+    name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -34,3 +34,12 @@ jobs:
 
       - name: Build
         run: bun run build
+
+  # Un unico check que branch protection pueda exigir: la matriz genera tres
+  # checks y un typo en sus nombres bloquea todos los merges para siempre.
+  passed:
+    name: ci
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
