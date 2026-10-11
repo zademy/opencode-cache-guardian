@@ -21,6 +21,14 @@ Versioning according to [SemVer](https://semver.org/).
   the TUI client loads no plugins. The 0.2.0 footer indicator therefore cannot
   render on this host; the code stays parked until a host version bridges `ctx.ui`.
 
+
+### Fixed
+
+-- README installation matches the verified setup: the shim in
+  `~/.config/opencode/plugins/` is the primary (author-verified) option, the
+  `opencode.json` local path is demoted with its caveat, and verification now uses
+  `plugin list --builtin`, the visible heartbeat and the telemetry count instead of
+  the TUI commands, whose stdout is not visible interactively.
 ## [0.2.0] - 2026-10-11
 
 ### Added

@@ -28,7 +28,7 @@ It does not compress. It does not summarize. It does not reorder. It does not to
 
 ## Installation
 
-Requires OpenCode `2.0.26` or higher.
+Requires OpenCode `2.0.26` or higher and [Bun](https://bun.sh).
 
 ```bash
 git clone https://github.com/zademy/opencode-cache-guardian
@@ -37,7 +37,21 @@ bun install
 bun run build
 ```
 
-### Option A — local path in `opencode.json`
+### Option A — shim in the plugins directory (verified)
+
+OpenCode discovers `~/.config/opencode/plugins/*.ts`; one shim file pointing at the
+built bundle is all it takes:
+
+```bash
+cat > ~/.config/opencode/plugins/cache-guardian.ts <<'EOF'
+export { default } from "/absolute/path/to/opencode-cache-guardian/dist/index.js"
+EOF
+```
+
+After `bun run build` the shim picks up the new bundle on the next restart — nothing
+to re-copy. This is the setup the author runs.
+
+### Option B — local path in `opencode.json`
 
 ```json
 {
@@ -51,32 +65,38 @@ bun run build
 }
 ```
 
-Or in `.opencode/plugins/cache-guardian/index.ts`, which is discovered automatically:
+The `plugin` key resolves npm specifiers, and a local path there is silently ignored
+in some versions. If the plugin does not appear with this option, use the shim.
 
-```ts
-export { default } from "../../../opencode-cache-guardian/dist/index.js"
-```
+### What you do NOT need to install
 
-### Option B — shim in the plugins directory
-
-The `plugin` key of `opencode.json` resolves npm specifiers; a local path there is
-silently ignored in some versions. If your configuration does not load the plugin, write a
-single file in the directory OpenCode does discover:
-
-```bash
-cat > ~/.config/opencode/plugins/cache-guardian.ts <<'EOF'
-export { default } from "/absolute/path/to/opencode-cache-guardian/dist/index.js"
-EOF
-```
+The `tui/` companion plugin is parked (see its section below): on 2.0.26 it cannot
+render. The heartbeat confirmation comes from the server plugin alone.
 
 ### Verification
 
-In an interactive session:
+1. The plugin is loaded:
 
-```
-/cache_guardian_doctor
-/cache_guardian_report
-```
+   ```bash
+   opencode plugin list --builtin | grep cache-guardian
+   ```
+
+   Use `--builtin`: it loads plugins in-process, while the plain command can query a
+   stale background service.
+
+2. It works — the visible way: restart the TUI, open any session, send a message.
+   The session gets exactly one synthetic message:
+
+   ```text
+   Cache Guardian activo — registrando métricas de prompt-cache de esta sesión (cache-read: N tokens)
+   ```
+
+3. Optional — telemetry is being persisted:
+
+   ```bash
+   sqlite3 ~/.local/share/opencode/opencode.db \
+     "select count(*) from kv where key like '%cache-guardian/v1/%'"
+   ```
 
 ## Commands
 
@@ -86,8 +106,9 @@ In an interactive session:
 | `/cache_guardian_doctor` | SDK version, registered hooks, metric sources |
 | `/cache_guardian_reset` | Deletes local telemetry. Requires `--confirm` |
 
-V2 offers no return channel in commands (`execute` returns `Promise<void>`), so
-the output goes to `stdout`.
+V2 offers no return channel in commands (`execute` returns `Promise<void>`), and the
+output goes to the server's stdout — in the interactive TUI you will not see it.
+The visible confirmation that the plugin is working is the session heartbeat.
 
 ### Evidence from a live run
 
