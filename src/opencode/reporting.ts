@@ -104,19 +104,22 @@ export function renderReport(input: ReportInput): string {
   lines.push(
     usage.samples === 0
       ? `Provider usage samples: ${na("no session.usage.updated events captured")}`
-      : `Provider usage samples: ${usage.samples}`,
+      : `Provider usage samples: ${usage.samples} (one per completed model step)`,
   )
   lines.push(`Provider cache read tokens: ${int(usage.cacheReadTokens)}`)
   lines.push(`Provider cache write tokens: ${int(usage.cacheWriteTokens)}`)
-  lines.push(`Provider input tokens: ${int(usage.inputTokens)}`)
+  lines.push(`Provider input tokens (non-cached): ${int(usage.inputTokens)}`)
   const deltas = usageDeltas(input.usage)
   if (deltas.dispatches > 0) {
     lines.push(
-      `Median per dispatch: cache read ${int(deltas.medianCacheReadTokens)} / input ${int(deltas.medianInputTokens)} tokens`,
+      `Median per dispatch: cache read ${int(deltas.medianCacheReadTokens)} / fresh input ${int(deltas.medianInputTokens)} tokens`,
     )
   } else {
     lines.push(`Median per dispatch: ${na("needs two usage samples in the same session")}`)
   }
+  lines.push(
+    `Coverage: ${input.usage.length} usage event(s) for ${input.observations.length} observed request(s)`,
+  )
   lines.push(
     `Provider cost: ${usage.costUsd === undefined ? na("not reported by provider") : `$${usage.costUsd.toFixed(4)}`}`,
   )

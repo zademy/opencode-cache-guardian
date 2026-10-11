@@ -1,34 +1,34 @@
 # Cache Guardian
 
-Plugin para **OpenCode V2** que mide si el prompt cache del proveedor se esta reutilizando
-como uno esperaria, y dice la verdad sobre lo que mide.
+A plugin for **OpenCode V2** that measures whether the provider's prompt cache is being
+reused the way you would expect — and tells the truth about what it measures.
 
-No comprime. No resume. No reordena. No toca el prompt.
+It does not compress. It does not summarize. It does not reorder. It does not touch the prompt.
 
-## Que hace y que no
+## What it does and what it does not
 
-**Hace**
+**Does**
 
-- Calcular huellas de un solo sentido (`SHA-256` o `HMAC-SHA256`) de cada bloque de
-  `system`, `tools` y `messages` en cada peticion, antes de enviarla al proveedor.
-- Comparar peticiones consecutivas del mismo scope y medir **cuanta parte del prefijo no
-  cambio**, y en que bloque cambio por primera vez.
-- Recoger el uso real de cache que reporta el proveedor (`cache.read` / `cache.write`) y el
-  coste, mediante el evento `session.usage.updated`.
-- Informar de ambos, claramente separados.
+- Compute one-way fingerprints (`SHA-256` or `HMAC-SHA256`) of every block of
+  `system`, `tools` and `messages` in each request, before it is sent to the provider.
+- Compare consecutive requests in the same scope and measure **how much of the prefix
+  did not change**, and in which block it changed first.
+- Collect the real cache usage the provider reports (`cache.read` / `cache.write`) and
+  the cost, via the `session.usage.updated` event.
+- Report both, clearly separated.
 
-**No hace**
+**Does not**
 
-- No modifica `system`, `messages`, `tools` ni `options`. En `observe` el plugin es
-  inmutable por construccion: hay pruebas de igualdad profunda antes y despues de cada hook.
-- No hace llamadas a modelos, embeddings ni red. Es determinista y local.
-- No comprime contexto ni compete con Context Mode.
-- No almacena prompts, codigo, secretos ni rutas absolutas.
-- No anuncia ahorro en dolares. Ver [docs/cache-metrics.md](docs/cache-metrics.md).
+- Does not modify `system`, `messages`, `tools` or `options`. In `observe` the plugin is
+  immutable by construction: there are deep-equality tests before and after every hook.
+- Makes no calls to models, embeddings or the network. It is deterministic and local.
+- Does not compress context or compete with Context Mode.
+- Stores no prompts, code, secrets or absolute paths.
+- Does not announce savings in dollars. See [docs/cache-metrics.md](docs/cache-metrics.md).
 
-## Instalacion
+## Installation
 
-Requiere OpenCode `2.0.26` o superior.
+Requires OpenCode `2.0.26` or higher.
 
 ```bash
 git clone https://github.com/zademy/opencode-cache-guardian
@@ -37,61 +37,61 @@ bun install
 bun run build
 ```
 
-### Opcion A — ruta local en `opencode.json`
+### Option A — local path in `opencode.json`
 
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
     {
-      "package": "/ruta/absoluta/a/opencode-cache-guardian",
+      "package": "/absolute/path/to/opencode-cache-guardian",
       "options": { "mode": "observe" }
     }
   ]
 }
 ```
 
-O en `.opencode/plugins/cache-guardian/index.ts`, que se descubre solo:
+Or in `.opencode/plugins/cache-guardian/index.ts`, which is discovered automatically:
 
 ```ts
 export { default } from "../../../opencode-cache-guardian/dist/index.js"
 ```
 
-### Opcion B — shim en el directorio de plugins
+### Option B — shim in the plugins directory
 
-La clave `plugin` de `opencode.json` resuelve especificadores de npm; una ruta local ahi se
-ignora en silencio en algunas versiones. Si tu configuracion no carga el plugin, escribe un
-archivo unico en el directorio que OpenCode si descubre:
+The `plugin` key of `opencode.json` resolves npm specifiers; a local path there is
+silently ignored in some versions. If your configuration does not load the plugin, write a
+single file in the directory OpenCode does discover:
 
 ```bash
 cat > ~/.config/opencode/plugins/cache-guardian.ts <<'EOF'
-export { default } from "/ruta/absoluta/a/opencode-cache-guardian/dist/index.js"
+export { default } from "/absolute/path/to/opencode-cache-guardian/dist/index.js"
 EOF
 ```
 
-### Comprobacion
+### Verification
 
-En una sesion interactiva:
+In an interactive session:
 
 ```
 /cache_guardian_doctor
 /cache_guardian_report
 ```
 
-## Comandos
+## Commands
 
-| Comando | Que hace |
+| Command | What it does |
 | --- | --- |
-| `/cache_guardian_report` | Informe: prefijos estables, uso real del proveedor, por scope |
-| `/cache_guardian_doctor` | Version del SDK, hooks registrados, fuentes de metricas |
-| `/cache_guardian_reset` | Borra la telemetria local. Requiere `--confirm` |
+| `/cache_guardian_report` | Report: stable prefixes, real provider usage, per scope |
+| `/cache_guardian_doctor` | SDK version, registered hooks, metric sources |
+| `/cache_guardian_reset` | Deletes local telemetry. Requires `--confirm` |
 
-V2 no ofrece canal de retorno en los comandos (`execute` devuelve `Promise<void>`), asi que
-la salida va a `stdout`.
+V2 offers no return channel in commands (`execute` returns `Promise<void>`), so
+the output goes to `stdout`.
 
-### Evidencia en ejecucion
+### Evidence from a live run
 
-Medido contra OpenCode `2.0.26` real, en una sesion de agente en vivo:
+Measured against real OpenCode `2.0.26`, in a live agent session:
 
 ```text
 plugin list --builtin  ->  cache-guardian  local  ~/.config/opencode/plugins/cache-guardian.ts
@@ -100,106 +100,127 @@ hook:  requestKind=primary  blockCount=15  prefixBlockCount=15
        stablePrefixRatio=1  firstDivergence=-1  hookDurationMs=0
        prefixEstimatedTokens=12284  provider=minimax-coding-plan
 
-uso:  cacheReadTokens=21958529  cacheWriteTokens=0
-      inputTokens=1178097  outputTokens=108161  costUsd=0
+usage: cacheReadTokens=21958529  cacheWriteTokens=0
+       inputTokens=1178097  outputTokens=108161  costUsd=0
 ```
 
-21,9 M de tokens leidos de cache frente a 1,2 M de entrada: la reutilizacion ocurre y el
-plugin la ve. `costUsd=0` es un cero real (plan gratuito) y se informa como `0`, no como
-`N/A`. El overhead del hook es de 0-1 ms.
+21.9M tokens read from cache versus 1.2M of input: reuse is happening and the
+plugin sees it. `costUsd=0` is a real zero (free plan) and is reported as `0`, not as
+`N/A`. Hook overhead is 0-1 ms.
 
-`primary` y `title` aparecen como valores separados de `requestKind`: los hooks se registran
-y se etiquetan por separado, y `title` no se dispara en doble junto a `context`.
+`primary` and `title` appear as separate values of `requestKind`: hooks are registered
+and labeled separately, and `title` does not double-fire alongside `context`.
 
-## Configuracion
+## Session heartbeat (visible confirmation)
 
-Ver [examples/opencode.jsonc](examples/opencode.jsonc). Todos los valores tienen un defecto
-razonable y un valor invalido degrada al defecto en lugar de fallar.
+The plugin confirms it is working inside your own conversation: the first time it
+records usage in a session, it injects exactly one synthetic message —
 
-| Opcion | Defecto | Que hace |
+```text
+Cache Guardian activo — registrando métricas de prompt-cache de esta sesión (cache-read: 13,926,976 tokens)
+```
+
+— labeled with a random geek tag (`cache-guardian segfault`, `cache-guardian tlb-miss`…).
+One per session, ever: the announcement is remembered durably in the plugin storage,
+so neither restarts nor the host re-instantiating plugins can repeat it.
+
+## Terminal indicator (TUI plugin) — parked
+
+The `tui/` directory holds a second plugin, `cache-guardian.status`, that renders the
+cumulative cache-read count in the session footer. On opencode 2.0.26 it cannot
+display anything: user plugins load only in the server process, whose context has no
+`ctx.ui` (verified empirically — every load shows `ui=false`), and the TUI client
+loads no plugins at all. The code is kept parked and correct; revive it when a host
+version bridges `ctx.ui` to plugins.
+
+## Configuration
+
+See [examples/opencode.jsonc](examples/opencode.jsonc). Every value has a sensible
+default and an invalid value degrades to the default instead of failing.
+
+| Option | Default | What it does |
 | --- | --- | --- |
-| `mode` | `observe` | Modo de operacion |
-| `enabled` | `true` | Si el plugin hace algo |
-| `privacy.hashing` | `sha256` | `sha256` o `hmac-sha256` |
-| `metrics.enabled` | `true` | Persistir telemetria |
-| `metrics.retentionDays` | `14` | Retencion por antiguedad |
-| `metrics.maxObservations` | `10000` | Tope por cantidad |
-| `limits.maxProcessingMs` | `40` | Presupuesto de CPU por peticion |
-| `limits.maxRequestBytes` | `2000000` | Tope de payload analizado |
-| `report.includeProviderUsage` | `true` | Incluir metricas reales |
-| `safe.dryRun` | `true` | Modo seguro sin escribir |
-| `safe.allowMutations` | `false` | Mutaciones (ver Limitaciones) |
+| `mode` | `observe` | Operating mode |
+| `enabled` | `true` | Whether the plugin does anything |
+| `privacy.hashing` | `sha256` | `sha256` or `hmac-sha256` |
+| `metrics.enabled` | `true` | Persist telemetry |
+| `metrics.retentionDays` | `14` | Retention by age |
+| `metrics.maxObservations` | `10000` | Cap by count |
+| `limits.maxProcessingMs` | `40` | CPU budget per request |
+| `limits.maxRequestBytes` | `2000000` | Cap on the analyzed payload |
+| `report.includeProviderUsage` | `true` | Include real metrics |
+| `safe.dryRun` | `true` | Safe mode without writing |
+| `safe.allowMutations` | `false` | Mutations (see Limitations) |
 
-## Privacidad
+## Privacy
 
-- Se almacena **solo** digests de un sentido, longitudes y etiquetas. Nunca texto.
-- `privacy.storeContent` esta cableado a `false` y **no** se puede activar desde la
-  configuracion.
-- Las partes multimedia se reducen a `media:<tipo>:<mediaType>`. Los bytes de imagen no se
-  hashean ni se copian.
-- `projectKey` es el identificador opaco del proyecto, no su ruta. `sessionKey` es un prefijo
-  del digest del id de sesion. El id real no se persiste.
-- La telemetria no sale del equipo. No hay red en el plugin.
-- Las claves de almacenamiento viven bajo `cache-guardian/v1/` en el almacenamiento oficial de
-  OpenCode, que respeta el aislamiento por proyecto.
+- **Only** one-way digests, lengths and labels are stored. Never text.
+- `privacy.storeContent` is hardwired to `false` and **cannot** be enabled from
+  configuration.
+- Multimedia parts are reduced to `media:<type>:<mediaType>`. Image bytes are never
+  hashed or copied.
+- `projectKey` is the opaque project identifier, not its path. `sessionKey` is a prefix
+  of the digest of the session id. The real id is never persisted.
+- Telemetry never leaves the machine. There is no network in the plugin.
+- Storage keys live under `cache-guardian/v1/` in OpenCode's official storage,
+  which respects per-project isolation.
 
-### Sobre HMAC
+### About HMAC
 
-Con `hmac-sha256`, un atacante sin la clave no puede confirmar que un texto conocido esta
-presente probando digests. La clave se genera **por proceso** y no se persiste, asi que:
+With `hmac-sha256`, an attacker without the key cannot confirm that a known text is
+present by trying digests. The key is generated **per process** and never persisted, so:
 
-- los digests no son comparables entre reinicios (cada proceso empieza con un prefijo vacio);
-- rotar es automatico: basta con reiniciar OpenCode.
+- digests are not comparable across restarts (each process starts with an empty prefix);
+- rotation is automatic: restarting OpenCode is enough.
 
-Es el intercambio consciente: proteccion contra diccionario a cambio de historial no
-persistente. Los conteos agregados siguen siendo validos; la comparacion de prefijos solo
-funciona dentro de una misma ejecucion.
+It is a conscious trade: dictionary protection in exchange for non-persistent history.
+Aggregate counts remain valid; prefix comparison only works within a single run.
 
-## Compatibilidad
+## Compatibility
 
-El plugin no depende del nombre ni de la API interna de ningun otro plugin, y no requiere
-que ninguno sepa que existe:
+The plugin does not depend on the name or internal API of any other plugin, and does
+not require any of them to know it exists:
 
-| Otro plugin | Relacion |
+| Other plugin | Relationship |
 | --- | --- |
-| Context Mode | No compite. Se observa lo que queda en el hook en su posicion actual |
-| Ponytail | No reordena ni reescribe sus instrucciones |
-| Hashline | No toca herramientas ni el formato de anclas `N:hh` |
-| RTK | No vuelve a comprimir salidas de CLI |
-| Tool Guardian | No intercepta ni duplica reglas de seguridad |
-| Error Explainer | No deduplica errores; se tratan como dinamicos |
-| Encoding Guard | No lee ni reescribe bytes de archivos |
+| Context Mode | No competition. What is left in the hook at its current position is observed |
+| Ponytail | Does not reorder or rewrite its instructions |
+| Hashline | Does not touch tools or the `N:hh` anchor format |
+| RTK | Does not re-compress CLI outputs |
+| Tool Guardian | Does not intercept or duplicate security rules |
+| Error Explainer | Does not deduplicate errors; they are treated as dynamic |
+| Encoding Guard | Does not read or rewrite file bytes |
 
-## Limitaciones
+## Limitations
 
-Dichas sin adornos:
+Stated plainly:
 
-1. **`safe` y `experimental` no hacen nada.** El esquema los acepta, pero se comportan
-   exactamente como `observe`. No se encontro ninguna transformacion semanticamente
-   demostrable que no reordenara texto libre, y reordenar puede cambiar el comportamiento
-   aunque el contenido sea identico. Es un resultado aceptable de la especificacion, no un
-   olvido: la alternativa era un flag `allowMutations` que no honrara su nombre.
-2. **Los comandos de barra no se han visto en una sesion interactiva.** El resto del
-   plugin si: se cargo y se ejecuto contra OpenCode `2.0.26` real, con hooks disparando,
-   observaciones persistidas y uso real del proveedor capturado. Escribe
-   `/cache_guardian_doctor` en una sesion para confirmar el registro de comandos. Ver
+1. **`safe` and `experimental` do nothing.** The schema accepts them, but they behave
+   exactly like `observe`. No semantically provable transformation was found that would
+   not reorder free text, and reordering can change behavior even when the content is
+   identical. It is an acceptable outcome of the specification, not an oversight:
+   the alternative was an `allowMutations` flag that would not honor its name.
+2. **Slash commands have not been seen in an interactive session.** The rest of the
+   plugin has: it loaded and ran against real OpenCode `2.0.26`, with hooks firing,
+   observations persisted and real provider usage captured. Type
+   `/cache_guardian_doctor` in a session to confirm command registration. See
    [docs/v2-compatibility.md](docs/v2-compatibility.md).
-3. **Los tokens son una estimacion.** `chars / 4`, etiquetado como tal.
-4. **La division en bloques es nuestra, no del proveedor.** Es un indicador estructural.
-5. **Sin metrics reales, el informe dice `N/A`.** No rellena huecos.
-6. **Los payloads que superan el limite se saltan** y se cuentan como `Skipped`.
+3. **Tokens are an estimate.** `chars / 4`, labeled as such.
+4. **The block split is ours, not the provider's.** It is a structural indicator.
+5. **Without real metrics, the report says `N/A`.** It does not fill gaps.
+6. **Payloads over the limit are skipped** and counted as `Skipped`.
 
-## Comparacion A/B
+## A/B comparison
 
-1. Mismo proveedor, modelo y tarea; una sesion con el plugin, otra sin.
-2. Separa cache **fria** de **caliente**. Mezclarlas inventa resultados.
-3. Compara `costUsd` y `cacheReadTokens`, que son los unicos facturables.
-4. Mide el overhead con `hookDurationMs` p50/p95.
+1. Same provider, model and task; one session with the plugin, one without.
+2. Separate **cold** from **warm** cache. Mixing them invents results.
+3. Compare `costUsd` and `cacheReadTokens`, which are the only billable ones.
+4. Measure overhead with `hookDurationMs` p50/p95.
 
-En `observe` la peticion es identica con y sin plugin, asi que un A/B de calidad no debería
-diferir. Si lo hace, es un bug de este plugin.
+In `observe` the request is identical with and without the plugin, so a quality A/B
+should not differ. If it does, it is a bug in this plugin.
 
-## Desarrollo
+## Development
 
 ```bash
 bun install
@@ -209,15 +230,15 @@ bun test
 bun run build
 ```
 
-CI corre typecheck, lint y tests en `ubuntu-latest`, `macos-latest` y `windows-latest`.
-El plugin no usa rutas Unix codificadas: la persistencia va por `ctx.storage`.
+CI runs typecheck, lint and tests on `ubuntu-latest`, `macos-latest` and `windows-latest`.
+The plugin uses no hardcoded Unix paths: persistence goes through `ctx.storage`.
 
-## Documentacion
+## Documentation
 
-- [docs/v2-compatibility.md](docs/v2-compatibility.md) — el contrato del SDK verificado.
-- [docs/cache-metrics.md](docs/cache-metrics.md) — que significa cada numero.
+- [docs/v2-compatibility.md](docs/v2-compatibility.md) — the verified SDK contract.
+- [docs/cache-metrics.md](docs/cache-metrics.md) — what each number means.
 - [CHANGELOG.md](CHANGELOG.md)
 
-## Licencia
+## License
 
-MIT. Ver [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

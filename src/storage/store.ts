@@ -15,8 +15,36 @@ export const ROOT = "cache-guardian/v1"
 export const OBSERVATION_PREFIX = `${ROOT}/observation/`
 export const USAGE_PREFIX = `${ROOT}/usage/`
 export const KEY_RING_PREFIX = `${ROOT}/`
+export const ANNOUNCED_PREFIX = `${ROOT}/announced/`
 
 const SCAN_PAGE = 500
+
+/**
+ * Heartbeat dedupe. The host re-instantiates plugins per request, so any
+ * in-memory "already announced" gate resets and the session gets spammed;
+ * this durable marker is what makes the heartbeat once per session, ever.
+ * Unreadable storage reports "already announced" — silence beats spam.
+ */
+export async function wasAnnounced(store: StorageLike, sessionKey: string): Promise<boolean> {
+  try {
+    const page = await store.scan({ prefix: `${ANNOUNCED_PREFIX}${sessionKey}`, limit: 1 })
+    return page.entries.length > 0
+  } catch {
+    return true
+  }
+}
+
+export async function markAnnounced(
+  store: StorageLike,
+  sessionKey: string,
+  time: number,
+): Promise<void> {
+  try {
+    await store.set(`${ANNOUNCED_PREFIX}${sessionKey}`, { time } as never)
+  } catch {
+    // telemetry must never break a request
+  }
+}
 
 /**
  * Zero-padded epoch millis so keys sort chronologically as plain strings, which makes

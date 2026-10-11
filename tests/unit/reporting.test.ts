@@ -86,7 +86,7 @@ describe("report: absent data renders as N/A, never as zero", () => {
     expect(empty).toContain("Median local stable prefix: N/A")
     expect(empty).toContain("Provider cache read tokens: N/A")
     expect(empty).toContain("Provider cache write tokens: N/A")
-    expect(empty).toContain("Provider input tokens: N/A")
+    expect(empty).toContain("Provider input tokens (non-cached): N/A")
     expect(empty).toContain("Provider cost: N/A")
     expect(NOT_AVAILABLE).toBe("N/A")
   })
@@ -109,6 +109,16 @@ describe("report: absent data renders as N/A, never as zero", () => {
 })
 
 describe("report: local metrics", () => {
+  test("coverage line shows how many dispatches produced usage events", () => {
+    const oneObs = observation()
+    const report = renderReport({
+      mode: "observe",
+      appVersion: "2.0.26",
+      observations: [oneObs, { ...oneObs, time: 2, firstDivergence: -1, stablePrefixRatio: 1 }],
+      usage: [sample()],
+    })
+    expect(report).toContain("Coverage: 1 usage event(s) for 2 observed request(s)")
+  })
   test("counts observations and comparable pairs separately", () => {
     const output = report([observation(), observation({ time: T0 + 1, firstDivergence: 9 })])
     expect(output).toContain("Requests observed: 2")

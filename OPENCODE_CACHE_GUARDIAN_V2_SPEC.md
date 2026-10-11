@@ -1,41 +1,41 @@
-# OpenCode Cache Guardian — Especificación de implementación V2
+# OpenCode Cache Guardian — V2 Implementation Specification
 
-> **Instrucción para el agente:** implementa el plugin funcional, sus pruebas y documentación. No te detengas en una propuesta arquitectónica. Investiga primero el SDK V2 realmente instalado y ajusta la implementación a sus tipos públicos. El comportamiento predeterminado debe ser **observe** y **cero mutaciones del prompt**.
+> **Agent instruction:** implement the functional plugin, its tests and documentation. Do not stop at an architectural proposal. Research the actually installed V2 SDK first and fit the implementation to its public types. The default behavior must be **observe** and **zero prompt mutations**.
 
-## 1. Objetivo
+## 1. Objective
 
-Construir `opencode-cache-guardian`, un plugin **local-first, determinista y multiplataforma** (Windows/macOS/Linux) para medir y, únicamente si es seguro, mejorar la **reutilización del prompt cache del proveedor** en OpenCode V2.
+Build `opencode-cache-guardian`, a **local-first, deterministic and cross-platform** (Windows/macOS/Linux) plugin to measure and — only if safe — improve the **reuse of the provider's prompt cache** in OpenCode V2.
 
-El usuario ya utiliza:
+The user already uses:
 
-- **Context Mode**: gestión, recuperación y reducción de contexto.
-- **Ponytail**: instrucciones/skill de calidad y simplicidad.
-- **Hashline**: lectura y edición con anclas precisas.
-- **RTK**: reducción/estructuración de output de CLI.
-- **Open Guard / Tool Guardian**: análisis de decisiones, redundancias y acciones riesgosas.
-- **Error Explainer**: interpretación de fallos.
-- Potencial **Encoding Guard** para ISO-8859-1/Windows-1252.
+- **Context Mode**: context management, retrieval and reduction.
+- **Ponytail**: quality and simplicity instructions/skill.
+- **Hashline**: reading and editing with precise anchors.
+- **RTK**: CLI output reduction/structuring.
+- **Open Guard / Tool Guardian**: analysis of decisions, redundancies and risky actions.
+- **Error Explainer**: failure interpretation.
+- Potential **Encoding Guard** for ISO-8859-1/Windows-1252.
 
-No duplicar ninguna de esas responsabilidades. Este plugin **no** debe comprimir, resumir, limpiar, reemplazar ni inyectar contexto. Su primera misión es responder de forma fiable: «¿están cambiando entre solicitudes partes del prompt que podrían permanecer estables?».
+Do not duplicate any of those responsibilities. This plugin must **not** compress, summarize, clean, replace or inject context. Its first mission is to answer reliably: "are parts of the prompt changing between requests that could remain stable?".
 
-### Garantías
+### Guarantees
 
-1. **Sin llamadas adicionales a modelos**. Ningún LLM, embedding, servidor externo ni API adicional para optimizar.
-2. **Sin alterar la semántica por defecto**. `observe` solo calcula huellas y estadísticas; no cambia `system`, `messages`, `tools` ni opciones del modelo.
-3. **Seguridad antes que ahorro**. No reorganizar bloques por el simple hecho de parecer estables.
-4. **Medición honesta**. Distinguir coincidencia local de prefijos de *cache hits facturados* por el proveedor; nunca confundir ambos.
-5. **Aislamiento** de proyectos/sesiones/proveedores/modelos/agentes; sin almacenar prompts, código fuente, secretos ni contenidos textuales por defecto.
-6. **Tolerancia a fallos**. Un error del plugin nunca debe romper una solicitud legítima en modo `observe`; degradar elegantemente.
-7. **Compatibilidad V2 real**. No utilizar hooks V1 ni APIs internas/experimentales sin aceptación explícita.
+1. **No additional model calls**. No LLM, embedding, external server or additional API for optimizing.
+2. **No semantic alteration by default**. `observe` only computes fingerprints and statistics; it changes no `system`, `messages`, `tools` or model options.
+3. **Safety before savings**. Do not reorder blocks merely because they appear stable.
+4. **Honest measurement**. Distinguish local prefix matches from *billed cache hits* by the provider; never confuse the two.
+5. **Isolation** of projects/sessions/providers/models/agents; no storing prompts, source code, secrets or textual content by default.
+6. **Fault tolerance**. A plugin error must never break a legitimate request in `observe` mode; degrade gracefully.
+7. **Real V2 compatibility**. No V1 hooks and no internal/experimental APIs without explicit acceptance.
 
-## 2. Referencias oficiales para verificar antes de escribir código
+## 2. Official references to verify before writing code
 
-- Plugin V2: https://dev.opencode.ai/v2/docs/build/plugins/
-- Migración V1→V2: https://dev.opencode.ai/v2/docs/build/plugins/migrate-v1
-- Configuración V2: verificar sección `plugins` en la documentación anterior.
-- Consultar los tipos del paquete V2 `@opencode/plugin` de la versión instalada.
+- V2 plugins: https://dev.opencode.ai/v2/docs/build/plugins/
+- V1→V2 migration: https://dev.opencode.ai/v2/docs/build/plugins/migrate-v1
+- V2 configuration: check the `plugins` section in the documentation above.
+- Consult the types of the installed V2 `@opencode/plugin` package.
 
-**IMPORTANTE:** en la documentación V2 la importación ilustrada es:
+**IMPORTANT:** the import illustrated in the V2 documentation is:
 
 ```ts
 import { Plugin } from "@opencode/plugin"
@@ -44,58 +44,58 @@ export default Plugin.define({
   id: "cache-guardian",
   async setup(ctx) {
     await ctx.session.hook("context", (event) => {
-      // MODO OBSERVE: nunca modificar event.
+      // OBSERVE MODE: never modify event.
     })
   },
 })
 ```
 
-Este bloque es orientativo, **no** implementación suficiente. Confirmar los tipos exactos y cómo registrar/disponer hooks. Para llamadas auxiliares considerar `compaction`, `generate`, `title` por separado solo si procede. **No** confundir `prompt` (admisión de mensajes) con `context` (antes del modelo).
+This block is guidance, **not** a sufficient implementation. Confirm the exact types and how to register/dispose hooks. For auxiliary calls consider `compaction`, `generate`, `title` separately only if appropriate. Do **not** confuse `prompt` (message admission) with `context` (before the model).
 
-Las modificaciones V2 a `event.system`, `event.messages` o `event.tools` son posibles, pero en este proyecto quedan prohibidas por defecto. El hook de `model.request`/HTTP solo deberá usarse si se valida que proporciona observabilidad útil sin acceder ni modificar información sensible.
+V2 modifications to `event.system`, `event.messages` or `event.tools` are possible, but in this project they are forbidden by default. The `model.request`/HTTP hook should only be used if it is validated to provide useful observability without accessing or modifying sensitive information.
 
-## 3. Primer diagnóstico obligatorio del agente
+## 3. First mandatory diagnostic of the agent
 
-1. Identificar versión exacta de OpenCode V2 y paquete plugin.
-2. Leer los tipos reales de `SessionContextHook`, `SystemPart`, `Message`, `TokenUsage`, registro de eventos, `ctx.storage`, `ctx.command`/herramientas y métricas disponibles.
-3. Verificar qué datos de uso/caché ofrece la API pública (cache reads/writes, input tokens, coste, latencia). **Si no existen, informar que no están disponibles y no inventarlos.**
-4. Verificar el orden real de hooks con Context Mode y otros plugins en una instancia de prueba. Un registro posterior ve cambios anteriores, pero no asumir que existe un hook universal «último antes del proveedor».
-5. Documentar limitaciones de OpenCode V2, compatibilidad exacta y decisiones de implementación.
-6. No afirmar que controlar los headers de HTTP activa mágicamente prompt caching; no establecer headers de caché sin documentación específica del proveedor.
+1. Identify the exact OpenCode V2 version and plugin package.
+2. Read the real types of `SessionContextHook`, `SystemPart`, `Message`, `TokenUsage`, event registration, `ctx.storage`, `ctx.command`/tools and the available metrics.
+3. Verify what usage/cache data the public API offers (cache reads/writes, input tokens, cost, latency). **If they do not exist, report that they are unavailable and do not invent them.**
+4. Verify the real hook order with Context Mode and other plugins in a test instance. A later registration sees earlier changes, but do not assume a universal "last before the provider" hook exists.
+5. Document OpenCode V2 limitations, exact compatibility and implementation decisions.
+6. Do not claim that controlling HTTP headers magically enables prompt caching; do not set cache headers without provider-specific documentation.
 
-## 4. Tres modos
+## 4. Three modes
 
-### `observe` (obligatorio, **default**)
+### `observe` (mandatory, **default**)
 
-- Observar solicitudes antes de cada despacho del modelo.
-- Calcular huellas **no reversibles** de bloques y secuencias, excluyendo contenido sensible de los logs.
-- Medir estabilidad entre peticiones comparables.
-- Mantener métricas locales con retención configurable.
-- Generar recomendaciones **sin alterar el prompt**.
-- Latencia del hook registrada; no pasar por un servicio remoto.
+- Observe requests before every model dispatch.
+- Compute **irreversible** fingerprints of blocks and sequences, excluding sensitive content from logs.
+- Measure stability between comparable requests.
+- Keep local metrics with configurable retention.
+- Generate recommendations **without altering the prompt**.
+- Hook latency recorded; do not go through a remote service.
 
-### `safe` (opcional, después de pruebas)
+### `safe` (optional, after testing)
 
-- Prohibido reorganizar, borrar, reescribir o deduplicar `messages`, pares tool-call/result, instrucciones de seguridad, instrucciones de sistema de otros plugins y esquemas de herramientas.
-- Únicamente permitir transformaciones **explícitamente autorizadas y semánticamente equivalentes**, verificables automáticamente. Si V2 no ofrece ningún conjunto de modificaciones inequívocamente seguras, implementar `safe` como `observe` + recomendaciones. Esto es un resultado aceptable.
-- No mover texto libre de `system` arbitrariamente; el orden puede alterar comportamiento, incluso si el contenido es idéntico.
-- Antes/después de cada transformación, comprobar invariantes estructurales y restaurar el original si falla cualquier validación.
-- Exigir opción de activación explícita, flags por proyecto y modo dry-run.
+- Forbidden: reordering, deleting, rewriting or deduplicating `messages`, tool-call/result pairs, security instructions, system instructions from other plugins and tool schemas.
+- Only allow **explicitly authorized and semantically equivalent** transformations, automatically verifiable. If V2 offers no unequivocally safe set of modifications, implement `safe` as `observe` + recommendations. This is an acceptable outcome.
+- Do not move free text of `system` arbitrarily; order can alter behavior even if the content is identical.
+- Before/after every transformation, check structural invariants and restore the original if any validation fails.
+- Require explicit opt-in, per-project flags and dry-run mode.
 
-### `experimental` (no implementar como funcionalidad activa en MVP)
+### `experimental` (do not implement as an active feature in the MVP)
 
-- Reservar para investigación en una rama/entorno aislado; no habilitar en producción.
-- Nunca seleccionar por defecto tras actualizar.
+- Reserve for research in an isolated branch/environment; do not enable in production.
+- Never selected by default after an upgrade.
 
-## 5. Modelo de datos y fingerprinting
+## 5. Data model and fingerprinting
 
-Una observación lógica debe incluir:
+A logical observation must include:
 
 ```ts
 interface CacheObservation {
   time: number;
-  projectKey: string;        // pseudónimo/no ruta absoluta en logs
-  sessionKey: string;        // pseudónimo
+  projectKey: string;        // pseudonym/no absolute path in logs
+  sessionKey: string;        // pseudonym
   provider: string;
   model: string;
   variant?: string;
@@ -105,30 +105,30 @@ interface CacheObservation {
   prefixBlockCount: number;
   prefixEstimatedTokens?: number;
   totalEstimatedTokens?: number;
-  stablePrefixRatio?: number; // métrica local, NO hit rate del proveedor
+  stablePrefixRatio?: number; // local metric, NOT the provider hit rate
   hookDurationMs: number;
   source: "local-estimate";
 }
 ```
 
-Puedes mejorar este modelo según los tipos públicos disponibles.
+You may improve this model according to the available public types.
 
-Reglas:
+Rules:
 
-- Calcular SHA-256 (o equivalente criptográfico) sobre **serialización canónica** del contenido observado, preservando el orden semántico. Incluir papel/rol, tipo de parte, nombre de herramienta y esquema cuando corresponda.
-- Evitar comparar cadenas JSON cuyo orden incidental de claves vuelva inestables los hashes; normalizar claves de objetos estructurados sin reordenar arrays.
-- **No normalizar espacios, saltos, capitalización, ni texto Unicode** si el proveedor no lo hace: normalizar puede fabricar coincidencias falsas.
-- Separar fingerprints de `system`, `messages` y `tools`; registrar también el prefijo agregado tal como se observe.
-- El orden/serialización del proveedor puede ser distinto de la representación del SDK: **etiquetar la medición como aproximación local**, no como verdad sobre cache hits reales.
-- Emparejar observaciones únicamente dentro del mismo proveedor, modelo, variante y tipo de solicitud, y preferentemente del mismo proyecto/sesión o scope de configuración.
-- Tratar contenidos multimodales de forma segura: metadatos/identificadores estables si están permitidos; jamás copiar blobs o imágenes al almacenamiento.
-- Usar hash con clave local opcional (HMAC) para resistir ataques de diccionario sobre cadenas conocidas; documentar la protección y rotación de clave.
-- Manejar contenido no serializable, referencias circulares, tipos desconocidos y payloads grandes sin fallar la petición.
-- No retener hashes de secretos de alta sensibilidad si se identifican por el contrato del SDK; ser conservador con métricas agregadas.
+- Compute SHA-256 (or a cryptographic equivalent) over **canonical serialization** of the observed content, preserving semantic order. Include role, part type, tool name and schema where applicable.
+- Avoid comparing JSON strings whose incidental key order makes hashes unstable; normalize keys of structured objects without reordering arrays.
+- **Do not normalize whitespace, line breaks, capitalization or Unicode text** if the provider does not: normalizing can fabricate false matches.
+- Separate fingerprints of `system`, `messages` and `tools`; also record the aggregate prefix exactly as observed.
+- The provider's order/serialization may differ from the SDK representation: **label the measurement as a local approximation**, not as truth about real cache hits.
+- Pair observations only within the same provider, model, variant and request type, and preferably the same project/session or configuration scope.
+- Handle multimodal content safely: stable metadata/identifiers if allowed; never copy blobs or images to storage.
+- Use optional keyed local hashing (HMAC) to resist dictionary attacks on known strings; document the protection and key rotation.
+- Handle non-serializable content, circular references, unknown types and large payloads without failing the request.
+- Do not retain hashes of highly sensitive secrets if they are identified by the SDK contract; be conservative with aggregate metrics.
 
-## 6. Algoritmo para identificar prefijos reutilizables
+## 6. Algorithm to identify reusable prefixes
 
-No se pretende reconstruir exactamente la serialización interna del proveedor. Se pretende un **indicador de estabilidad estructural**.
+The goal is not to reconstruct the provider's exact internal serialization. The goal is a **structural stability indicator**.
 
 ```text
 previousBlocks = canonicalFingerprints(previousRequest)
@@ -142,34 +142,34 @@ for i = 0; i < min(lengths):
 report(stablePrefix, totalBlocks, estimatedTokenLengths)
 ```
 
-- No combinar bloques cuyos roles o formatos difieran.
-- Comparar solo peticiones compatibles.
-- Calcular estabilidad de prefijo sin asumir que todos los proveedores hacen caching sobre los mismos límites mínimos o TTL.
-- Registrar si la primera divergencia aparece en `system`, definiciones de herramientas o contexto variable, **sin registrar contenido de ese bloque**.
-- Si la solicitud o metadata no es observable, omitir con motivo explícito.
-- Preferir métricas basadas en conteos exactos **si el SDK los proporciona**; en caso contrario, ofrecer estimaciones marcadas como tales, con tokenizer específico del proveedor/modelo si hay uno local y disponible. No usar `string.length` como cantidad exacta de tokens.
+- Do not combine blocks whose roles or formats differ.
+- Compare only compatible requests.
+- Compute prefix stability without assuming all providers cache on the same minimum boundaries or TTLs.
+- Record whether the first divergence appears in `system`, tool definitions or variable context, **without recording that block's content**.
+- If the request or metadata is not observable, skip with an explicit reason.
+- Prefer metrics based on exact counts **if the SDK provides them**; otherwise offer estimates labeled as such, with a provider/model-specific tokenizer if a local one is available. Do not use `string.length` as an exact token count.
 
-## 7. Métricas y costes: dos clases separadas
+## 7. Metrics and costs: two separate classes
 
-### 7.1 Métricas observables locales
+### 7.1 Local observable metrics
 
-- Conteo de peticiones estudiadas.
-- Bloques estables / bloques totales.
-- Prefijo estable en bloques y estimación de tokens.
-- Distribución de primera divergencia.
-- Latencia añadida por hook p50/p95.
-- Peticiones omitidas y causas.
-- Frecuencia de cambios de `system`/`tools`/`messages`.
+- Count of studied requests.
+- Stable blocks / total blocks.
+- Stable prefix in blocks and token estimate.
+- First-divergence distribution.
+- Added hook latency p50/p95.
+- Skipped requests and reasons.
+- Frequency of changes to `system`/`tools`/`messages`.
 
-### 7.2 Métricas **reales** del proveedor (solo si disponibles)
+### 7.2 **Real** provider metrics (only if available)
 
-- Tokens de caché leídos/escritos, conforme a definiciones del proveedor.
-- Tokens de entrada sin caché.
-- Coste reportado o calculable con tarifas **configuradas explícitamente y fechadas**.
-- Cache hit rate **real** solo con denominador definido y campos suficientemente fiables.
-- Distinguir tokens cacheados, tokens facturados, descuentos y diferencias de latencia.
+- Cache tokens read/written, per the provider's definitions.
+- Non-cached input tokens.
+- Reported cost, or computable with rates **explicitly configured and dated**.
+- **Real** cache hit rate only with a defined denominator and sufficiently reliable fields.
+- Distinguish cached tokens, billed tokens, discounts and latency differences.
 
-Si no hay acceso a uso real, mostrar por ejemplo:
+If there is no access to real usage, show for example:
 
 ```text
 Provider cache read tokens: N/A — not exposed by current API
@@ -177,53 +177,53 @@ Estimated stable prefix: 8,400 tokens (local estimate)
 Estimated savings in USD: N/A — insufficient billing data
 ```
 
-**Nunca** anunciar «ahorro de X%» sobre una cifra que solo mide prefijos coincidentes. El caching lo determina el proveedor, no Cache Guardian.
+**Never** announce "X% savings" on a figure that only measures matching prefixes. Caching is determined by the provider, not by Cache Guardian.
 
-## 8. Compatibilidad explícita con el stack del usuario
+## 8. Explicit compatibility with the user's stack
 
 ### Context Mode
 
-- No competir en compactación, RAG, indexación, búsqueda ni filtrado.
-- No rehacer outputs ni resumir contexto.
-- En modo `observe`, observar lo que realmente queda en el hook de contexto en la posición actual.
-- Registrar orden de hooks conocido; exponer limitación si otro plugin transforma contexto después.
+- Do not compete in compaction, RAG, indexing, search or filtering.
+- Do not redo outputs or summarize context.
+- In `observe` mode, observe what actually remains in the context hook at its current position.
+- Record the known hook order; expose the limitation if another plugin transforms context afterwards.
 
 ### Ponytail
 
-- No reordenar, reemplazar, simplificar ni borrar sus instrucciones.
-- No inferir prioridades de un bloque por su nombre.
+- Do not reorder, replace, simplify or delete its instructions.
+- Do not infer a block's priorities from its name.
 
 ### Hashline
 
-- No reordenar herramientas, reemplazar sus definiciones, ni afectar anclas `N:hh`.
-- No modificar el contenido de tool calls ni resultados.
+- Do not reorder tools, replace their definitions, or affect `N:hh` anchors.
+- Do not modify the content of tool calls or results.
 
 ### RTK
 
-- No comprimir de nuevo resultados de CLI.
-- No interferir con comandos shell.
+- Do not re-compress CLI results.
+- Do not interfere with shell commands.
 
 ### Open Guard / Tool Guardian
 
-- No interceptar ni duplicar reglas de seguridad, deduplicación o ejecución de herramientas.
+- Do not intercept or duplicate security rules, deduplication or tool execution.
 
 ### Error Explainer
 
-- No deduplicar errores, diagnósticos o mensajes; considerarlos dinámicos.
+- Do not deduplicate errors, diagnostics or messages; consider them dynamic.
 
 ### Encoding Guard
 
-- No leer ni reescribir bytes de archivos; no cambiar archivos ISO-8859-1, Windows-1252 ni CRLF/BOM.
+- Do not read or rewrite file bytes; do not change ISO-8859-1, Windows-1252 or CRLF/BOM files.
 
-### Degradación
+### Degradation
 
-- Ningún otro plugin necesita conocer la existencia de Cache Guardian.
-- Sin depender de nombres de plugin ni de sus APIs internas.
-- Si detectar procedencia exacta de bloques es imposible, mostrar `source: unknown` en lugar de adivinar.
+- No other plugin needs to know that Cache Guardian exists.
+- No depending on plugin names or their internal APIs.
+- If detecting the exact provenance of blocks is impossible, show `source: unknown` instead of guessing.
 
-## 9. Configuración propuesta
+## 9. Proposed configuration
 
-Usar `ctx.options` en la forma oficial de V2 si está disponible; validar esquema con tipos y tests. **El siguiente JSON es propuesta de nuestro plugin, no claves nativas de OpenCode**:
+Use `ctx.options` in the official V2 form if available; validate the schema with types and tests. **The following JSON is our plugin's proposal, not native OpenCode keys**:
 
 ```json
 {
@@ -245,19 +245,19 @@ Usar `ctx.options` en la forma oficial de V2 si está disponible; validar esquem
 }
 ```
 
-Valores orientativos; elegir límites razonables y no prometer un timeout duro sin capacidad real de interrupción. Añadir configuración mediante variables de entorno si es útil, sin exponer secretos.
+Indicative values; choose reasonable limits and do not promise a hard timeout without real interruption capability. Add configuration via environment variables if useful, without exposing secrets.
 
-## 10. Reporte y comandos
+## 10. Reporting and commands
 
-Proponer un comando de OpenCode V2 o herramienta de consulta, usando únicamente el mecanismo registrado/documentado:
+Propose an OpenCode V2 command or query tool, using only the registered/documented mechanism:
 
-- `cache_guardian_report` (read-only): estado por sesión, proyecto, proveedor/modelo y ventanas temporales.
-- `cache_guardian_doctor` (read-only): comprobar versión SDK, modo, hooks, compatibilidad y fuentes de métricas.
-- `cache_guardian_reset` (acción explícita): limpiar telemetría local del plugin, con confirmación si la API lo permite.
+- `cache_guardian_report` (read-only): status per session, project, provider/model and time windows.
+- `cache_guardian_doctor` (read-only): check SDK version, mode, hooks, compatibility and metric sources.
+- `cache_guardian_reset` (explicit action): clean the plugin's local telemetry, with confirmation if the API allows it.
 
-No afirmar que `/cache report` existe automáticamente. Si V2 permite registrar comandos, implementar vía API oficial; si no, herramienta equivalente y documentar invocación.
+Do not claim that `/cache report` exists automatically. If V2 allows registering commands, implement them via the official API; if not, an equivalent tool and document the invocation.
 
-Ejemplo:
+Example:
 
 ```text
 Cache Guardian | observe | OpenCode V2
@@ -271,9 +271,9 @@ Changed block group first: messages in 71% of comparable pairs
 No prompts or source code stored.
 ```
 
-No guardar ni publicar ejemplos fabricados como métricas reales.
+Do not store or publish fabricated examples as real metrics.
 
-## 11. Arquitectura propuesta
+## 11. Proposed architecture
 
 ```text
 opencode-cache-guardian/
@@ -313,121 +313,121 @@ opencode-cache-guardian/
 └── tsconfig.json
 ```
 
-Simplificar si conviene, pero separar claramente el SDK V2, algoritmo determinista, persistencia y reporting.
+Simplify if convenient, but clearly separate the V2 SDK, the deterministic algorithm, persistence and reporting.
 
-## 12. Persistencia, privacidad y plataformas
+## 12. Persistence, privacy and platforms
 
-- Preferir almacenamiento oficial `ctx.storage` si soporta consultas y retención requeridas; si no, persistencia local segura (por ejemplo SQLite solo si se justifica) con rutas multiplataforma.
-- No usar rutas Unix codificadas en duro. Usar APIs de rutas del runtime y scopes de proyecto.
-- No recolectar prompts completos, contenido de archivos, tokens secretos, endpoints privados, argumentos de herramientas ni bodies HTTP.
-- No enviar telemetría a terceros.
-- No mostrar rutas completas a repositorios en informes compartidos por defecto.
-- Respetar límites de almacenamiento y podar por tiempo/cantidad.
-- Evitar bloqueo de archivos y corrupción por acceso concurrente.
-- Tratar metadatos de tokens/costes como información local.
-- Validar ausencia de escritura de datos sensibles por inspección de archivos de telemetría.
+- Prefer official `ctx.storage` if it supports the required queries and retention; otherwise secure local persistence (for example SQLite only if justified) with cross-platform paths.
+- No hardcoded Unix paths. Use the runtime's path APIs and project scopes.
+- Do not collect full prompts, file contents, secret tokens, private endpoints, tool arguments or HTTP bodies.
+- Do not send telemetry to third parties.
+- Do not show full repository paths in shared reports by default.
+- Respect storage limits and prune by time/count.
+- Avoid file locking and corruption from concurrent access.
+- Treat token/cost metadata as local information.
+- Validate the absence of sensitive data writes by inspecting the telemetry files.
 
-## 13. Rendimiento
+## 13. Performance
 
-- Algoritmo determinista, sin red y sin LLM.
-- Optimizar hashing incremental si aporta beneficios reales.
-- No serializar repetidamente payloads gigantes si puede acotarse sin mentir sobre la cobertura.
-- Si se supera límite, registrar `skipped: oversized_payload` y continuar sin bloquear.
-- Medir p50/p95/p99 de latencia del propio plugin.
-- No leer el repositorio ni recorrer archivos para construir métricas de caché.
-- El modo `observe` no debe causar un efecto secundario visible en el contexto o herramientas.
+- Deterministic algorithm, no network and no LLM.
+- Optimize incremental hashing if it brings real benefits.
+- Do not repeatedly serialize giant payloads if they can be bounded without lying about coverage.
+- If a limit is exceeded, record `skipped: oversized_payload` and continue without blocking.
+- Measure p50/p95/p99 latency of the plugin itself.
+- Do not read the repository or walk files to build cache metrics.
+- `observe` mode must cause no visible side effect on context or tools.
 
-## 14. Pruebas obligatorias
+## 14. Mandatory tests
 
-### Unidad
+### Unit
 
-- Hashes iguales para estructuras equivalentes con claves JSON en distinto orden.
-- Hashes diferentes si cambia un carácter, orden de array, rol, llamada de herramienta o schema.
-- Unicode, acentos, emojis, CRLF, cadenas vacías y contenido grande.
-- Primera divergencia al comienzo/medio/final.
-- Comparación cero bloques / una solicitud / cambio de modelo/variante.
-- Datos desconocidos/multimodales no producen crash.
-- Se maneja la ausencia de métricas reales sin inventar ahorro.
-- Reglas `observe` nunca mutan `event`.
+- Equal hashes for equivalent structures with JSON keys in different order.
+- Different hashes if one character, the array order, a role, a tool call or a schema changes.
+- Unicode, accents, emojis, CRLF, empty strings and large content.
+- First divergence at the beginning/middle/end.
+- Zero-block comparison / single request / model or variant change.
+- Unknown/multimodal data does not crash.
+- Absence of real metrics handled without inventing savings.
+- `observe` rules never mutate `event`.
 
-### Integración V2
+### V2 integration
 
-- El plugin carga mediante `Plugin.define` en la versión oficial instalada.
-- La solicitud con plugin en `observe` coincide con la solicitud sin plugin en todos los campos observables de `system`, `messages`, `tools` y `options` (deep equality).
-- Context Mode, Ponytail y Hashline siguen funcionando si están instalados.
-- Registrar solicitud `context` durante el loop del agente y no etiquetar `compaction`/`title` incorrectamente.
-- Comprobar manejo de excepciones del almacenamiento y ejecución concurrente.
-- Comprobar limpieza de registros de hooks al descargar el plugin si aplica.
-- Verificar Windows/macOS/Linux al menos con una matriz CI por sistema operativo.
+- The plugin loads via `Plugin.define` on the installed official version.
+- The request with the plugin in `observe` matches the request without the plugin in all observable fields of `system`, `messages`, `tools` and `options` (deep equality).
+- Context Mode, Ponytail and Hashline keep working if they are installed.
+- Register the `context` request during the agent loop and do not mislabel `compaction`/`title`.
+- Check storage exception handling and concurrent execution.
+- Check hook registration cleanup when unloading the plugin, if applicable.
+- Verify Windows/macOS/Linux with at least a CI matrix per operating system.
 
-### Privacidad
+### Privacy
 
-- Incluir fixture con token falso y ruta privada; demostrar que no se guardan en claro en logs o métricas.
-- No almacenar plaintext del system prompt ni del historial.
+- Include a fixture with a fake token and a private path; demonstrate that they are not stored in clear in logs or metrics.
+- Do not store plaintext of the system prompt or the history.
 
-### Calidad y benchmark A/B
+### Quality and A/B benchmark
 
-- Baseline A: OpenCode V2 sin Cache Guardian.
-- Variante B: OpenCode V2 + Cache Guardian (`observe`).
-- Mantener mismo proveedor/modelo/tarea y documentar caché fría/caliente.
-- Medir overhead y métricas reales cuando estén disponibles.
-- **No concluir mejora de coste con estimaciones locales de prefijos.**
-- Para el futuro `safe`, añadir pruebas de equivalencia y tareas funcionales; si empeora calidad, desactivar.
+- Baseline A: OpenCode V2 without Cache Guardian.
+- Variant B: OpenCode V2 + Cache Guardian (`observe`).
+- Keep the same provider/model/task and document cold/warm cache.
+- Measure overhead and real metrics when available.
+- **Do not conclude cost improvement from local prefix estimates.**
+- For the future `safe`, add equivalence tests and functional tasks; if quality worsens, disable it.
 
-## 15. Fases de entrega
+## 15. Delivery phases
 
-### Fase 1 — Discovery (obligatoria)
+### Phase 1 — Discovery (mandatory)
 
-Identificar API V2 real, métricas oficiales y límites. Escribir hallazgos en `docs/v2-compatibility.md`.
+Identify the real V2 API, official metrics and limits. Write the findings in `docs/v2-compatibility.md`.
 
-### Fase 2 — Core determinista
+### Phase 2 — Deterministic core
 
-Implementar serialización canónica, hashing, comparación de prefijos, separación de scopes y tests.
+Implement canonical serialization, hashing, prefix comparison, scope separation and tests.
 
-### Fase 3 — Hook observe
+### Phase 3 — Observe hook
 
-Instalar hook `ctx.session.hook("context", ...)`, evaluar captura de otros tipos de solicitud solo si es necesaria, y garantizar inmutabilidad.
+Install the `ctx.session.hook("context", ...)` hook, evaluate capturing other request types only if necessary, and guarantee immutability.
 
-### Fase 4 — Persistencia y reporte
+### Phase 4 — Persistence and reporting
 
-Almacenamiento local privado, agregaciones, retención, herramientas de consulta y `doctor`.
+Private local storage, aggregations, retention, query tools and `doctor`.
 
-### Fase 5 — Integración y benchmarks
+### Phase 5 — Integration and benchmarks
 
-Pruebas con plugins del stack, compatibilidad multiplataforma y reporte A/B.
+Tests with the stack's plugins, cross-platform compatibility and the A/B report.
 
-### Fase 6 — Modo safe (solo si se demuestra viable)
+### Phase 6 — Safe mode (only if proven viable)
 
-Diseñar transformaciones limitadas y opt-in **sin reordenar instrucciones de texto libre**. Si no existe ninguna transformación semánticamente demostrable, documentarlo y no introducir cambios riesgosos.
+Design limited, opt-in transformations **without reordering free-text instructions**. If no semantically provable transformation exists, document it and introduce no risky changes.
 
-## 16. Criterios de aceptación / Definition of Done
+## 16. Acceptance criteria / Definition of Done
 
-- [ ] Proyecto TypeScript instalable como plugin **OpenCode V2**, no V1.
-- [ ] Compila y pasan typecheck, lint y tests.
-- [ ] Modo `observe` activado por defecto.
-- [ ] **Cero cambios** en prompts, tools, roles, opciones y resultados del modelo en `observe`.
-- [ ] Cero llamadas LLM, embeddings o red por parte del optimizador.
-- [ ] Fingerprints locales comparables por modelo/proveedor/agente/proyecto.
-- [ ] Informe diferencia estimaciones de estabilidad y estadísticas reales del proveedor.
-- [ ] Sin métricas reales, presenta `N/A`, no porcentajes ficticios de ahorro.
-- [ ] Sin almacenamiento de texto confidencial.
-- [ ] Latencia y límites medidos, sin bloquear tareas legítimas.
-- [ ] Compatible en pruebas con Context Mode, Ponytail, Hashline y RTK; sin reescribir comportamiento de otros plugins.
-- [ ] Windows/macOS/Linux soportados y CI configurado.
-- [ ] README con instalación local V2, configuración, privacidad, ejemplos, limitaciones y guía de comparación A/B.
-- [ ] Documentada la versión real del SDK y la forma de obtener/desconocer cache usage.
-- [ ] No se activa ninguna optimización semánticamente riesgosa por defecto.
+- [ ] Installable TypeScript project as an **OpenCode V2** plugin, not V1.
+- [ ] Compiles and passes typecheck, lint and tests.
+- [ ] `observe` mode enabled by default.
+- [ ] **Zero changes** to prompts, tools, roles, options and model results in `observe`.
+- [ ] Zero LLM, embedding or network calls by the optimizer.
+- [ ] Local fingerprints comparable per model/provider/agent/project.
+- [ ] The report distinguishes stability estimates from the provider's real statistics.
+- [ ] Without real metrics, it presents `N/A`, not fictitious savings percentages.
+- [ ] No storage of confidential text.
+- [ ] Latency and limits measured, without blocking legitimate tasks.
+- [ ] Compatible in tests with Context Mode, Ponytail, Hashline and RTK; without rewriting other plugins' behavior.
+- [ ] Windows/macOS/Linux supported and CI configured.
+- [ ] README with local V2 installation, configuration, privacy, examples, limitations and an A/B comparison guide.
+- [ ] Real SDK version documented, and how cache usage is obtained or unknown.
+- [ ] No semantically risky optimization enabled by default.
 
-## 17. Entregables
+## 17. Deliverables
 
-1. Código fuente del plugin publicable (sin URL inventada).
-2. `package.json`, scripts `test`, `typecheck`, `lint`, `build`.
-3. Tests unitarios e integración real V2.
-4. README en español (y opcionalmente inglés).
-5. `docs/v2-compatibility.md` y `docs/cache-metrics.md`.
-6. Ejemplo probado de `opencode.jsonc` V2.
-7. Reporte final del agente: features implementadas, comandos ejecutados, pruebas realizadas, restricciones, métricas observadas y funcionalidades diferidas.
+1. Publishable plugin source code (no invented URL).
+2. `package.json`, with `test`, `typecheck`, `lint`, `build` scripts.
+3. Unit and real V2 integration tests.
+4. README in Spanish (and optionally English).
+5. `docs/v2-compatibility.md` and `docs/cache-metrics.md`.
+6. Tested example of a V2 `opencode.jsonc`.
+7. Final agent report: features implemented, commands run, tests performed, constraints, metrics observed and deferred functionality.
 
-## 18. Instrucción final para OpenCode
+## 18. Final instruction for OpenCode
 
-**Construye el plugin, no solo lo diseñes.** Empieza inspeccionando el proyecto y el SDK V2 instalado; sigue las fases; implementa el MVP `observe` completo; ejecuta verificaciones y corrige fallos. Si no puedes obtener campos de cache billing desde la API pública, documenta la limitación y continúa con métricas locales honestas. No copies APIs V1. No modifiques archivos de los plugins existentes ni conviertas el optimizador en otro Context Mode. Prioriza precisión, privacidad, compatibilidad y coste medible sobre promesas de ahorro.
+**Build the plugin, do not just design it.** Start by inspecting the project and the installed V2 SDK; follow the phases; implement the complete `observe` MVP; run verifications and fix failures. If you cannot obtain cache billing fields from the public API, document the limitation and continue with honest local metrics. Do not copy V1 APIs. Do not modify existing plugins' files or turn the optimizer into another Context Mode. Prioritize accuracy, privacy, compatibility and measurable cost over savings promises.

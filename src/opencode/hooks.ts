@@ -1,6 +1,28 @@
 import type { Plugin } from "@opencode/plugin"
 import type { RequestKind } from "../metrics/observation.ts"
+import { markAnnounced, wasAnnounced } from "../storage/store.ts"
 import type { Recorder } from "./recorder.ts"
+
+/** Geek tag shown on the heartbeat label; one is drawn at random per session. */
+const FREAK_TAGS = [
+  "cache-hit",
+  "tlb-miss",
+  "prefetching",
+  "zero-copy",
+  "hot-path",
+  "segfault",
+  "kernel-panic",
+  "race-condition",
+  "off-by-one",
+  "stack-smash",
+  "oom-killer",
+  "heap-sniffing",
+  "swap-storm",
+  "sudo-mode",
+  "grep-master",
+  "warming-up",
+]
+const freakTag = () => FREAK_TAGS[Math.floor(Math.random() * FREAK_TAGS.length)]
 
 /**
  * Hook installation.
@@ -121,6 +143,7 @@ export interface UsageCapture {
 export function installUsageCapture(ctx: Context, recorder: Recorder): UsageCapture {
   const capture: UsageCapture = { stop: () => {}, samples: 0 }
   let stopped = false
+  const announced = new Set<string>()
 
   void (async () => {
     try {
@@ -130,6 +153,32 @@ export function installUsageCapture(ctx: Context, recorder: Recorder): UsageCapt
         if (!sample) continue
         capture.samples += 1
         await recorder.persistUsage(sample)
+        // Visible heartbeat: one synthetic message per session. The in-memory Set is
+        // only a fast path — the host re-instantiates plugins per request, so the
+        // durable marker is what actually prevents repeats. Fire-and-forget: the
+        // heartbeat must never break capture.
+        if (!announced.has(sample.sessionKey)) {
+          announced.add(sample.sessionKey)
+          if (!(await wasAnnounced(ctx.storage, sample.sessionKey))) {
+            await markAnnounced(ctx.storage, sample.sessionKey, sample.time)
+            const sessionID = (event as { data?: { sessionID?: string } }).data?.sessionID
+            if (sessionID) {
+              const read = sample.cacheReadTokens
+              ctx.session
+                .synthetic({
+                  sessionID: sessionID as never,
+                  text:
+                    "Cache Guardian activo — registrando métricas de prompt-cache de esta sesión" +
+                    (typeof read === "number"
+                      ? ` (cache-read: ${read.toLocaleString("en-US")} tokens)`
+                      : ""),
+                  description: `cache-guardian ${freakTag()}`,
+                  metadata: { plugin: "cache-guardian" },
+                })
+                .catch(() => {})
+            }
+          }
+        }
       }
     } catch (error) {
       capture.error = describe(error)
