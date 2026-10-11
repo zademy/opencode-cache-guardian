@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Ejemplo de configuracion de Cache Guardian.
+  // Copiar las claves que interesen: todo tiene un valor por defecto sensato.
+
+  "plugins": [
+    {
+      "package": "../opencode-cache-guardian",
+      "options": {
+        "mode": "observe",
+        "enabled": true,
+
+        "privacy": {
+          "storeContent": false,
+          "hashing": "hmac-sha256"
+        },
+
+        "metrics": {
+          "enabled": true,
+          "retentionDays": 14,
+          "maxObservations": 10000
+        },
+
+        "limits": {
+          "maxProcessingMs": 40,
+          "maxRequestBytes": 2000000
+        },
+
+        "report": {
+          "includeProviderUsage": true
+        },
+
+        "safe": {
+          "dryRun": true,
+          "allowMutations": false
+        }
+      }
+    }
+  ]
+}
+
+//
+// Notas:
+//
+// - privacy.storeContent esta cableado a false y no se puede activar. Es deliberado:
+//   el plugin no tiene ningun interruptor que guarde prompts.
+// - mode sigue siendo "observe" en toda esta version. "safe" y "experimental" se
+//   aceptan en el esquema pero se comportan como observe: ver README, seccion Limitaciones.
+// - hashing: "sha256" usa el hash simple; "hmac-sha256" resiste ataques de diccionario
+//   sobre textos conocidos. La clave se genera por proceso y no se persiste, de modo que
+//   los digests no son comparables entre ejecuciones distintas (ver README, Privacidad).
+// - La clave "plugin" de opencode.json resuelve especificadores de npm; una ruta local
+//   ahi se ignora en silencio en algunas versiones. Si tu version no la carga, usa el shim
+//   en ~/.config/opencode/plugins/ descrito en el README.
