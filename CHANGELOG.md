@@ -3,6 +3,31 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Versionado segun [SemVer](https://semver.org/lang/es/).
 
+## [0.1.2] - 2026-10-11
+
+Semantica de los contadores del proveedor verificada contra el fuente de OpenCode V2
+(packages/core/src/session/usage.ts y projector.ts), no solo contra datos observados.
+
+### Corregido
+
+- Etiquetas honestas en el bloque de uso del proveedor:
+  - `Provider input tokens (non-cached)`: el campo `input` del evento es la entrada NO
+    servida desde cache (`nonCachedInputTokens`), no la total. La peticion real es
+    aproximadamente input + cacheRead + cacheWrite.
+  - `Provider usage samples: N (one per completed model step)`: el evento se publica en
+    Step.Ended/Step.Failed, asi que hay exactamente uno por despacho completado.
+  - `Median per dispatch: cache read X / fresh input Y`.
+
+### Anadido
+
+- Linea `Coverage: N usage event(s) for M observed request(s)`. Cuando N < M hay
+  despachos que no produjeron uso (fallos, errores). En los datos reales: 112/148.
+- Documentada la limitacion estructural mas importante encontrada hasta ahora: el
+  proveedor ve ~9x mas entrada por despacho (~111k tokens: 863 frescos + ~110k de cache)
+  que lo que el hook `context` expone (~12,273 tokens estimados). La metrica local
+  describe solo el payload visible en el hook; las cifras del proveedor describen la
+  peticion completa. Ambas se muestran, separadas, y ninguna se deriva de la otra.
+
 ## [0.1.1] - 2026-10-11
 
 Corregido a partir de datos reales de una sesión en vivo (114 observaciones, 79 muestras

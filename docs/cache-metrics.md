@@ -92,6 +92,32 @@ Dato real que ilustra el valor de separar ambas clases: mediana por despacho de 
 cada petición se sirve desde cache. Ninguna de las dos cifras se deriva de la otra ni de
 nuestra estimación local de 12,273 tokens.
 
+### Granularidad y semantica de cada campo (verificada en el fuente V2)
+
+Leido directamente en el codigo de OpenCode V2 (packages/core/src/session/):
+
+- El evento se publica una vez por **Step.Ended** y **Step.Failed** (si trae uso),
+  ademas de UsageRecorded. Un paso = un despacho del modelo. Confirmado tambien en
+  datos: 62/62 ventanas entre observaciones consecutivas contienen exactamente un
+  evento. La linea `Median per dispatch` esta correctamente nombrada.
+- El evento lleva contadores ACUMULATIVOS: el proyector suma cada uso a la fila de
+  sesion (SQL `+ value`) y publica el total. Por eso el informe toma la
+  ultima lectura por sesion en vez de sumar.
+- `input` es `nonCachedInputTokens`: SOLO la entrada que no vino del
+  cache, no la entrada total. La peticion real por despacho es aproximadamente
+  input + cacheRead + cacheWrite.
+
+### Limitacion estructural: el hook context no ve el prompt completo
+
+Medido en la sesion real: entrada fresca mediana 761 tokens + cache read ~110k por
+  despacho frente a una estimacion local del payload observado de ~12,273 tokens.
+  El prompt que el proveedor recibe es ~9x mayor que lo que el hook `context`
+  expone. La metrica estructural local cubre solo lo visible en el hook; las cifras
+  del proveedor son las unicas completas. No se puede verificar desde fuera si la
+  diferencia es contenido anadido despues del hook o unidades de cache propias del
+  proveedor; el informe muestra ambas clases por separado y ninguna se deriva de la
+  otra.
+
 ## Por que el ahorro estimado es siempre N/A
 
 El informe imprime, siempre, sin excepcion:
