@@ -3,6 +3,24 @@
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning according to [SemVer](https://semver.org/).
 
+## [0.3.0] - 2026-10-11
+
+### Added
+
+-- **Session heartbeat**: the first usage recorded in a session injects one synthetic
+  message into that session ("Cache Guardian activo — …", with the cumulative
+  cache-read count and a random geek tag). Announcements are remembered durably in
+  plugin storage, so a session is never announced twice — the host re-instantiates
+  plugins per request, so any in-memory gate would repeat the message.
+-- `wasAnnounced`/`markAnnounced` storage helpers (`cache-guardian/v1/announced/`).
+
+### Changed
+
+-- **TUI plugin parked.** Verified empirically on 2.0.26: user plugins load only in
+  the server process and its context carries no `ctx.ui` (6/6 loads `ui=false`);
+  the TUI client loads no plugins. The 0.2.0 footer indicator therefore cannot
+  render on this host; the code stays parked until a host version bridges `ctx.ui`.
+
 ## [0.2.0] - 2026-10-11
 
 ### Added

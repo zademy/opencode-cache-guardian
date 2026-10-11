@@ -111,30 +111,27 @@ plugin sees it. `costUsd=0` is a real zero (free plan) and is reported as `0`, n
 `primary` and `title` appear as separate values of `requestKind`: hooks are registered
 and labeled separately, and `title` does not double-fire alongside `context`.
 
-## Terminal indicator (TUI plugin)
+## Session heartbeat (visible confirmation)
 
-The `tui/` directory is a second plugin, `cache-guardian.status`, which shows in the
-session footer the cumulative count of tokens read from cache: `cg cache read 24.4M`. It
-updates live with every `session.usage.updated`. With no data it shows nothing (it does
-not print a misleading zero).
+The plugin confirms it is working inside your own conversation: the first time it
+records usage in a session, it injects exactly one synthetic message —
 
-Installation (the TUI only discovers plugins that are DIRECTORIES):
-
-```bash
-ln -s "$(pwd)/tui" ~/.config/opencode/plugins/cache-guardian-status
+```text
+Cache Guardian activo — registrando métricas de prompt-cache de esta sesión (cache-read: 13,926,976 tokens)
 ```
 
-And restart OpenCode. The footer appears when you open a session.
+— labeled with a random geek tag (`cache-guardian segfault`, `cache-guardian tlb-miss`…).
+One per session, ever: the announcement is remembered durably in the plugin storage,
+so neither restarts nor the host re-instantiating plugins can repeat it.
 
-Limitations, stated plainly:
+## Terminal indicator (TUI plugin) — parked
 
-- The host resolves only `effect` and `@opencode/plugin` to its own copy. Importing
-  `@opentui/solid` from a third-party plugin clashes with the host's internal copy
-  (duplicate `OPENTUI_FORCE_UNICODE` registration), so the indicator renders
-  plain strings, with no color or layout of its own. As soon as the host provides
-  `@opentui` to plugins, the polish can be raised.
-- The server process also scans that directory; the plugin disables itself if it does
-  not find `ctx.ui` (there it does nothing, by design).
+The `tui/` directory holds a second plugin, `cache-guardian.status`, that renders the
+cumulative cache-read count in the session footer. On opencode 2.0.26 it cannot
+display anything: user plugins load only in the server process, whose context has no
+`ctx.ui` (verified empirically — every load shows `ui=false`), and the TUI client
+loads no plugins at all. The code is kept parked and correct; revive it when a host
+version bridges `ctx.ui` to plugins.
 
 ## Configuration
 

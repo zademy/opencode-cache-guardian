@@ -7,6 +7,7 @@ import {
   KEY_RING_PREFIX,
   loadObservations,
   loadUsage,
+  markAnnounced,
   OBSERVATION_PREFIX,
   prune,
   ROOT,
@@ -14,8 +15,17 @@ import {
   recordUsage,
   reset,
   USAGE_PREFIX,
+  wasAnnounced,
 } from "../../src/storage/store.ts"
 import { FakeStorage } from "../fixtures/index.ts"
+
+test("heartbeat marker announces once per session key", async () => {
+  const store = new FakeStorage()
+  expect(await wasAnnounced(store, "sess_hash_a")).toBe(false)
+  await markAnnounced(store, "sess_hash_a", 123)
+  expect(await wasAnnounced(store, "sess_hash_a")).toBe(true)
+  expect(await wasAnnounced(store, "sess_hash_b")).toBe(false)
+})
 
 const DAY = 24 * 60 * 60 * 1000
 
