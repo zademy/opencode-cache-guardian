@@ -10,6 +10,7 @@ import {
   type ProviderUsageSample,
   parseUsageEvent,
   totalUsage,
+  usageDeltas,
 } from "../../src/metrics/provider-usage.ts"
 
 const observation = (over: Partial<StoredObservation> = {}): StoredObservation => ({
@@ -174,15 +175,81 @@ describe("totalUsage", () => {
     expect(totals.cacheReadTokens).toBeUndefined()
   })
 
-  test("sums only the fields that were actually reported", () => {
+  // Live-verified shape: session.usage.updated carries session-lifetime
+  // cumulative counters, monotonic within a session. These are real numbers
+  // from a live session, kept as a regression fixture against double-counting.
+  const LIVE = [
+    { inputTokens: 1148635, cacheReadTokens: 20300000 },
+    { inputTokens: 1214178, cacheReadTokens: 24371828 },
+  ]
+
+  test("takes each session's latest counter instead of summing cumulative samples", () => {
+    const totals = totalUsage(LIVE.map((v, i) => sample({ time: i + 1, ...v })))
+    expect(totals.inputTokens).toBe(1214178)
+    expect(totals.cacheReadTokens).toBe(24371828)
+  })
+
+  test("sums across sessions but never within one", () => {
     const totals = totalUsage([
-      sample({ inputTokens: 10, cacheReadTokens: 100, costUsd: 0.5 }),
-      sample({ inputTokens: 5, costUsd: 0.25 }),
+      sample({ sessionKey: "a", inputTokens: 100, cacheReadTokens: 7 }),
+      sample({ sessionKey: "b", inputTokens: 50, cacheReadTokens: 3 }),
     ])
-    expect(totals.inputTokens).toBe(15)
+    expect(totals.inputTokens).toBe(150)
+    expect(totals.cacheReadTokens).toBe(10)
+  })
+
+  test("a field the newest sample lacks falls back to the newest one carrying it", () => {
+    const totals = totalUsage([
+      sample({ time: 1, cacheReadTokens: 100 }),
+      sample({ time: 2, inputTokens: 5 }),
+    ])
     expect(totals.cacheReadTokens).toBe(100)
-    expect(totals.costUsd).toBe(0.75)
-    expect(totals.cacheWriteTokens).toBeUndefined()
+    expect(totals.inputTokens).toBe(5)
+  })
+})
+
+describe("usageDeltas", () => {
+  const sample = (over: Partial<ProviderUsageSample>): ProviderUsageSample => ({
+    time: 1,
+    sessionKey: "s",
+    source: "provider",
+    ...over,
+  })
+
+  test("per-dispatch deltas of cumulative counters, median over the series", () => {
+    const deltas = usageDeltas([
+      sample({ time: 1, inputTokens: 1148635, cacheReadTokens: 20300000 }),
+      sample({ time: 2, inputTokens: 1180000, cacheReadTokens: 22000000 }),
+      sample({ time: 3, inputTokens: 1214178, cacheReadTokens: 24371828 }),
+    ])
+    expect(deltas.dispatches).toBe(2)
+    expect(deltas.medianCacheReadTokens).toBe(2371828)
+    expect(deltas.medianInputTokens).toBe(34178)
+  })
+
+  test("a counter reset yields no delta rather than a negative one", () => {
+    const deltas = usageDeltas([
+      sample({ time: 1, cacheReadTokens: 100 }),
+      sample({ time: 2, cacheReadTokens: 50 }),
+    ])
+    expect(deltas.dispatches).toBe(0)
+    expect(deltas.medianCacheReadTokens).toBeUndefined()
+  })
+
+  test("sessions never share a delta window", () => {
+    const deltas = usageDeltas([
+      sample({ time: 1, sessionKey: "a", cacheReadTokens: 100 }),
+      sample({ time: 2, sessionKey: "a", cacheReadTokens: 200 }),
+      sample({ time: 3, sessionKey: "b", cacheReadTokens: 500 }),
+      sample({ time: 4, sessionKey: "b", cacheReadTokens: 700 }),
+    ])
+    expect(deltas.dispatches).toBe(2)
+    expect(deltas.medianCacheReadTokens).toBe(200)
+  })
+
+  test("no samples means no dispatches, not zero", () => {
+    expect(usageDeltas([]).dispatches).toBe(0)
+    expect(usageDeltas([]).medianInputTokens).toBeUndefined()
   })
 })
 

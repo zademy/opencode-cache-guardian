@@ -3,6 +3,31 @@
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 Versionado segun [SemVer](https://semver.org/lang/es/).
 
+## [0.1.1] - 2026-10-11
+
+Corregido a partir de datos reales de una sesión en vivo (114 observaciones, 79 muestras
+de uso): los contadores del proveedor son acumulativos por sesión, no valores por
+petición.
+
+### Corregido
+
+- **totalUsage sumaba muestras acumulativas y sobrecontaba ~33x.** Los contadores de
+  `session.usage.updated` son monótonos dentro de una sesión; el total correcto por
+  sesión es la lectura más reciente, sumada entre sesiones. Fixture de regresión con los
+  números reales de la sesión en vivo.
+- Un campo que la muestra más reciente no lleva cae ahora a la muestra más reciente que sí
+  lo lleve, en lugar de perderse.
+
+### Añadido
+
+- usageDeltas: mediana por despacho de cache read / input / output, como delta entre
+  muestras consecutivas de la misma sesión. Las deltas negativas (reinicio de contador)
+  se descartan. Línea nueva en el informe: `Median per dispatch`.
+- Línea `Identical consecutive requests` en el bloque local. En la sesión real de
+  referencia fue 99/100 pares comparables: el contexto se reenvía igual y el proveedor lo
+  sirve desde cache (109,168 tokens leídos de cache por despacho frente a 761 de entrada
+  nueva).
+
 ## [0.1.0] - 2026-10-11
 
 Primera version. Plugin para OpenCode V2 `2.0.26`.

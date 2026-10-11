@@ -1,7 +1,7 @@
 import type { Mode } from "../config/schema.ts"
 import { aggregate, type LocalMetrics, recommend } from "../metrics/aggregation.ts"
 import type { StoredObservation } from "../metrics/observation.ts"
-import { type ProviderUsageSample, totalUsage } from "../metrics/provider-usage.ts"
+import { type ProviderUsageSample, totalUsage, usageDeltas } from "../metrics/provider-usage.ts"
 
 /**
  * Rendering only. Two metric classes are printed in separate blocks and never merged:
@@ -87,6 +87,9 @@ export function renderReport(input: ReportInput): string {
   lines.push(`Median estimated stable prefix: ${int(metrics.medianStablePrefixTokens)} tokens`)
   lines.push(`Median estimated request size: ${int(metrics.medianTotalTokens)} tokens`)
   lines.push(
+    `Identical consecutive requests: ${metrics.divergenceFreePairs}/${metrics.comparablePairs} comparable pair(s)`,
+  )
+  lines.push(
     `Hook overhead p50/p95: ${ms(metrics.hookLatencyMs.p50)} / ${ms(metrics.hookLatencyMs.p95)}`,
   )
   if (metrics.skippedTotal > 0) {
@@ -106,6 +109,14 @@ export function renderReport(input: ReportInput): string {
   lines.push(`Provider cache read tokens: ${int(usage.cacheReadTokens)}`)
   lines.push(`Provider cache write tokens: ${int(usage.cacheWriteTokens)}`)
   lines.push(`Provider input tokens: ${int(usage.inputTokens)}`)
+  const deltas = usageDeltas(input.usage)
+  if (deltas.dispatches > 0) {
+    lines.push(
+      `Median per dispatch: cache read ${int(deltas.medianCacheReadTokens)} / input ${int(deltas.medianInputTokens)} tokens`,
+    )
+  } else {
+    lines.push(`Median per dispatch: ${na("needs two usage samples in the same session")}`)
+  }
   lines.push(
     `Provider cost: ${usage.costUsd === undefined ? na("not reported by provider") : `$${usage.costUsd.toFixed(4)}`}`,
   )

@@ -89,8 +89,36 @@ export function parseUsageEvent(
 }
 
 /**
- * Sum samples. A field is present only if at least one sample carried it, so "no
- * provider data" stays visibly distinct from "the provider reported zero".
+ * Per-session sample lists ordered by time.
+ */
+function samplesBySession(samples: readonly ProviderUsageSample[]): ProviderUsageSample[][] {
+  const bySession = new Map<string, ProviderUsageSample[]>()
+  for (const sample of samples) {
+    const bucket = bySession.get(sample.sessionKey)
+    if (bucket) bucket.push(sample)
+    else bySession.set(sample.sessionKey, [sample])
+  }
+  for (const bucket of bySession.values()) bucket.sort((a, b) => a.time - b.time)
+  return [...bySession.values()]
+}
+
+/**
+ * The most recent value of a counter within one session. Verified against live
+ * data: session.usage.updated carries session-lifetime cumulative counters (values
+ * are monotonic within a session), so summing samples would count the same tokens
+ * once per event. The session total is the latest reading, not the sum.
+ */
+function latestIn(session: readonly ProviderUsageSample[], field: keyof ProviderUsageSample) {
+  for (let i = session.length - 1; i >= 0; i--) {
+    const value = session[i]?.[field]
+    if (typeof value === "number" && Number.isFinite(value)) return value
+  }
+  return undefined
+}
+
+/**
+ * Totals across sessions. A field is present only if some sample carried it, so
+ * "no provider data" stays visibly distinct from "the provider reported zero".
  */
 export function totalUsage(samples: readonly ProviderUsageSample[]): ProviderUsageTotals {
   const totals: ProviderUsageTotals = { samples: samples.length }
@@ -100,12 +128,16 @@ export function totalUsage(samples: readonly ProviderUsageSample[]): ProviderUsa
   let write: number | undefined
   let cost: number | undefined
 
-  for (const sample of samples) {
-    if (sample.inputTokens !== undefined) input = (input ?? 0) + sample.inputTokens
-    if (sample.outputTokens !== undefined) output = (output ?? 0) + sample.outputTokens
-    if (sample.cacheReadTokens !== undefined) read = (read ?? 0) + sample.cacheReadTokens
-    if (sample.cacheWriteTokens !== undefined) write = (write ?? 0) + sample.cacheWriteTokens
-    if (sample.costUsd !== undefined) cost = (cost ?? 0) + sample.costUsd
+  for (const session of samplesBySession(samples)) {
+    const add = (field: keyof ProviderUsageSample, acc?: number) =>
+      latestIn(session, field) === undefined
+        ? acc
+        : (acc ?? 0) + (latestIn(session, field) as number)
+    input = add("inputTokens", input)
+    output = add("outputTokens", output)
+    read = add("cacheReadTokens", read)
+    write = add("cacheWriteTokens", write)
+    cost = add("costUsd", cost)
   }
 
   if (input !== undefined) totals.inputTokens = input
@@ -115,4 +147,54 @@ export function totalUsage(samples: readonly ProviderUsageSample[]): ProviderUsa
   if (cost !== undefined) totals.costUsd = cost
 
   return totals
+}
+
+export interface UsageDeltas {
+  /** Consecutive same-session sample pairs both carrying the counter. */
+  dispatches: number
+  medianCacheReadTokens?: number
+  medianInputTokens?: number
+  medianOutputTokens?: number
+}
+
+/**
+ * Per-dispatch deltas: the increase of each cumulative counter between consecutive
+ * samples of the same session. Negative deltas (a counter reset, e.g. after a model
+ * switch) are dropped rather than clamped, so they neither skew the median nor
+     silently understate it.
+ */
+export function usageDeltas(samples: readonly ProviderUsageSample[]): UsageDeltas {
+  const read: number[] = []
+  const input: number[] = []
+  const output: number[] = []
+
+  for (const session of samplesBySession(samples)) {
+    for (const field of ["cacheReadTokens", "inputTokens", "outputTokens"] as const) {
+      let previous: number | undefined
+      for (const sample of session) {
+        const value = sample[field]
+        if (typeof value === "number" && Number.isFinite(value)) {
+          if (previous !== undefined && value >= previous) {
+            const target =
+              field === "cacheReadTokens" ? read : field === "inputTokens" ? input : output
+            target.push(value - previous)
+          }
+          previous = value
+        }
+      }
+    }
+  }
+
+  const median = (values: number[]) =>
+    values.length === 0
+      ? undefined
+      : [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]
+
+  const dispatches = read.length || input.length || output.length
+  return {
+    dispatches,
+    medianCacheReadTokens: median(read),
+    medianInputTokens: median(input),
+    medianOutputTokens: median(output),
+  }
 }

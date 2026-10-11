@@ -74,6 +74,24 @@ Un campo ausente se muestra como `N/A`. Un `0` real (por ejemplo, cache write de
 peticion de cache caliente) si se muestra como `0`. La distincion importa: `N/A` significa
 "no lo sé", `0` significa "lo sé y es cero".
 
+### Los contadores son acumulativos por sesión
+
+Verificado con datos en vivo: dentro de una sesión los valores de `session.usage.updated`
+son **monótonos crecientes** (contadores de vida de la sesión, no importes por petición).
+Por eso el informe **nunca suma muestras**: el total de una sesión es la lectura más
+reciente de cada contador, y el total global es la suma entre sesiones. Sumar las muestras
+contaría los mismos tokens una vez por evento (en datos reales, ~33 veces más).
+
+Lo que sí es por petición es la **delta** entre dos muestras consecutivas de la misma
+sesión, que el informe muestra como `Median per dispatch`. Una delta negativa (contador
+que se reinicia, p. ej. al cambiar de modelo) se descarta, no se acota: distorsionaría la
+mediana igual hacia abajo.
+
+Dato real que ilustra el valor de separar ambas clases: mediana por despacho de cache read
+109,168 tokens frente a input 761 tokens. El proveedor confirma que casi todo el prompt de
+cada petición se sirve desde cache. Ninguna de las dos cifras se deriva de la otra ni de
+nuestra estimación local de 12,273 tokens.
+
 ## Por que el ahorro estimado es siempre N/A
 
 El informe imprime, siempre, sin excepcion:
